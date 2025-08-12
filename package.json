@@ -1,5 +1,5 @@
 {
-  "name": "template-deep-research",
+  "name": "tradeing-agent",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -17,8 +17,10 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ai-sdk/mistral": "^1.2.8",
+    "@ai-sdk/mistral": "0.0.46",
+    "@ai-sdk/openai": "0.0.46",
     "@mastra/core": "latest",
+    "@mastra/evals": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",

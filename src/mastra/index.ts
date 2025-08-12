@@ -1,8 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
-import { researchWorkflow } from './workflows/researchWorkflow';
 import { researchAgent } from './agents/TrendAgent';
-import { generateReportWorkflow } from './workflows/generateReportWorkflow';
 import { tradeDecisionWorkflow } from './workflows/tradeDecisionWorkflow';
 
 export const mastra = new Mastra({
@@ -12,5 +10,5 @@ export const mastra = new Mastra({
   agents: {
     researchAgent,
   },
-  workflows: { generateReportWorkflow, researchWorkflow, tradeDecisionWorkflow },
+  workflows: { tradeDecisionWorkflow },
 });

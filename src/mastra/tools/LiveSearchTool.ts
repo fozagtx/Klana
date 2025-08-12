@@ -61,7 +61,6 @@ export const webSearchTool = createTool({
         const text = r.description ?? "";
 
         try {
-          // If we have at least some snippet/description, try summarizing it.
           if (!text || text.length < 50) {
             processedResults.push({
               title,

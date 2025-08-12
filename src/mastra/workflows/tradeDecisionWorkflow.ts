@@ -6,8 +6,8 @@ import { fetchMarketDataTool } from "../tools/fetchMarketDataTool";
 import { computeIndicatorsTool } from "../tools/computeIndicatorsTool";
 import { webSearchTool } from "../tools/LiveSearchTool";
 import { positionSuggesterTool } from "../tools/positionSuggesterTool";
+import { tradeDecisionScorer } from "../scorers/tradeDecisionScorer";
 
-// Shared context schema carried through steps
 const ctxSchema = z.object({
   imageUrl: z.string().url().optional(),
   imageBase64: z.string().optional(),
@@ -16,7 +16,7 @@ const ctxSchema = z.object({
   symbol: z.string(),
   interval: z.enum(["1m", "5m", "15m", "30m", "1h", "4h", "1d"]).default("1h"),
   range: z.string().default("200"),
-  provider: z.enum(["alpha", "finnhub"]).default("alpha"),
+  provider: z.enum(["alpha"]).default("alpha"),
   market: z.enum(["stock", "forex", "crypto"]).default("stock"),
 
   searchQuery: z.string().default(""),
@@ -32,6 +32,8 @@ const ctxSchema = z.object({
   indicators: z.any().optional(),
   results: z.any().optional(),
   suggestion: z.any().optional(),
+  score: z.number().optional(),
+  scoreReason: z.string().optional(),
   error: z.string().optional(),
 });
 
@@ -101,6 +103,12 @@ const suggestPositionStep = createStep({
   id: "position-suggestion-step",
   inputSchema: ctxSchema,
   outputSchema: ctxSchema,
+  scorers: {
+    tradeDecision: {
+      scorer: tradeDecisionScorer,
+      sampling: { type: "ratio", rate: 1 },
+    },
+  },
   execute: async ({ inputData, mastra }) => {
     const suggestion: any = await (positionSuggesterTool as any).execute({
       context: {
@@ -120,9 +128,41 @@ const suggestPositionStep = createStep({
   },
 });
 
+const scoreSuggestionStep = createStep({
+  id: "score-suggestion-step",
+  inputSchema: ctxSchema,
+  outputSchema: ctxSchema,
+  execute: async ({ inputData }) => {
+    try {
+      const runResult = await tradeDecisionScorer.run({
+        input: {
+          symbol: inputData.symbol,
+          timeframe: inputData.timeframe,
+          risk: inputData.risk,
+          accountEquity: inputData.accountEquity,
+          indicators: (inputData as any)?.indicators ?? {},
+          imageFindings: (inputData as any)?.imageFindings ?? {},
+          search: (inputData as any)?.results ?? [],
+        },
+        output: { suggestion: (inputData as any)?.suggestion ?? null },
+      });
+      return { ...inputData, score: runResult.score, scoreReason: runResult.reason };
+    } catch (e: any) {
+      return { ...inputData, score: 0, scoreReason: e?.message ?? "scoring failed" };
+    }
+  },
+});
+
 export const tradeDecisionWorkflow = createWorkflow({
   id: "trade-decision-workflow",
-  steps: [analyzeImageStep, fetchDataStep, computeIndicatorsStep, liveSearchStep, suggestPositionStep],
+  steps: [
+    analyzeImageStep,
+    fetchDataStep,
+    computeIndicatorsStep,
+    liveSearchStep,
+    suggestPositionStep,
+    scoreSuggestionStep,
+  ],
   inputSchema: ctxSchema,
   outputSchema: ctxSchema,
 });
@@ -133,4 +173,5 @@ tradeDecisionWorkflow
   .then(computeIndicatorsStep)
   .then(liveSearchStep)
   .then(suggestPositionStep)
+  .then(scoreSuggestionStep)
   .commit();

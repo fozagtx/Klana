@@ -1,11 +1,20 @@
-
 import { mistral } from '@ai-sdk/mistral';
 import { Agent } from '@mastra/core/agent';
-import { evaluateResultTool } from '../tools/evaluateTrendTool';
-import { extractLearningsTool } from '../tools/extractLessonsTool';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 import { webSearchTool } from '../tools/LiveSearchTool';
+import { analyzeImageTool } from '../tools/analyzeImageTool';
+import { fetchMarketDataTool } from '../tools/fetchMarketDataTool';
+import { computeIndicatorsTool } from '../tools/computeIndicatorsTool';
+import { positionSuggesterTool } from '../tools/positionSuggesterTool';
+import { createAnswerRelevancyScorer, createToxicityScorer } from "@mastra/evals/scorers/llm";
 
 const mainModel = mistral('pixtral-large-latest');
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db",
+  }),
+});
 
 export const researchAgent = new Agent({
   name: 'Research Agent',
@@ -44,9 +53,22 @@ export const researchAgent = new Agent({
   Use all the tools available to you systematically and stop after the follow-up phase.
   `,
   model: mainModel,
+  memory,
   tools: {
     webSearchTool,
-    evaluateResultTool,
-    extractLearningsTool,
+    analyzeImageTool,
+    fetchMarketDataTool,
+    computeIndicatorsTool,
+    positionSuggesterTool,
+  },
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: mistral("pixtral-large-latest") }),
+      sampling: { type: "ratio", rate: 0.5 },
+    },
+    safety: {
+      scorer: createToxicityScorer({ model: mistral("pixtral-large-latest") }),
+      sampling: { type: "ratio", rate: 1 },
+    },
   },
 });
