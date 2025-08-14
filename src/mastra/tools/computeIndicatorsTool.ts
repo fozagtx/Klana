@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-// Simple indicator computation on normalized candles: { t, o, h, l, c, v }
 export const computeIndicatorsTool = createTool({
   id: "compute-indicators",
   description: "Compute EMA(20,50), RSI(14), MACD(12,26,9), ATR(14) for given candles.",

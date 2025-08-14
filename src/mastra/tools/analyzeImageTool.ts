@@ -1,8 +1,8 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { generateObject } from "ai";
+import { mistral } from "@ai-sdk/mistral";
 
-// Analyzes a chart/screenshot to extract trading-relevant signals
-// Uses an existing LLM agent to reason over the provided image URL/base64 and context.
 export const analyzeImageTool = createTool({
   id: "analyze-image",
   description:
@@ -18,7 +18,7 @@ export const analyzeImageTool = createTool({
       .optional()
       .describe("Optional user context: symbol hint, timeframe, notes"),
   }),
-  execute: async ({ context, mastra }) => {
+  execute: async ({ context }) => {
     const { imageUrl, imageBase64, context: userContext } = context;
 
     if (!imageUrl && !imageBase64) {
@@ -34,8 +34,11 @@ export const analyzeImageTool = createTool({
       };
     }
 
-    // Reuse evaluationAgent for structured reasoning
-    const agent = mastra!.getAgent("evaluationAgent");
+    const imageDescriptor = imageUrl
+      ? `Image URL: ${imageUrl}`
+      : imageBase64
+        ? "Image provided as base64 (data URL)."
+        : "No image provided.";
 
     const prompt = `You are a trading assistant. Analyze the provided chart image and extract structured findings.
 Return a concise JSON with:
@@ -46,27 +49,35 @@ Return a concise JSON with:
 - notes: short text
 - signal: { direction: "buy" | "sell" | "wait" | "unknown", confidence: number (0-1) }
 
-User context: ${userContext ?? "(none)"}`;
+User context: ${userContext ?? "(none)"}
+${imageDescriptor}`;
 
-    const messages = [
-      { role: "user" as const, content: prompt },
-    ];
+    const content: Array<any> = [{ type: "text", text: prompt }];
+    if (imageUrl) content.push({ type: "image", image: imageUrl });
+    if (!imageUrl && imageBase64) content.push({ type: "image", image: imageBase64 });
 
-    const response = await agent.generate(messages, {
-      experimental_output: z.object({
-        instrument: z.string().nullable(),
-        timeframe: z.string().nullable(),
-        patterns: z.array(z.string()).default([]),
-        supportResistance: z.array(z.string()).default([]),
-        notes: z.string().default("")
-          .describe("Short analysis notes"),
-        signal: z.object({
-          direction: z.enum(["buy", "sell", "wait", "unknown"]).default("unknown"),
-          confidence: z.number().min(0).max(1).default(0),
+    try {
+      const { object } = await generateObject({
+        model: mistral("pixtral-large-latest"),
+        schema: z.object({
+          instrument: z.string().nullable(),
+          timeframe: z.string().nullable(),
+          patterns: z.array(z.string()).default([]),
+          supportResistance: z.array(z.string()).default([]),
+          notes: z.string().default("").describe("Short analysis notes"),
+          signal: z.object({
+            direction: z.enum(["buy", "sell", "wait", "unknown"]).default("unknown"),
+            confidence: z.number().min(0).max(1).default(0),
+          }),
         }),
-      }),
-    });
-
-    return { result: response.object };
+        messages: [
+          { role: "user", content },
+        ],
+      });
+      return { result: object };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { error: msg };
+    }
   },
 });
