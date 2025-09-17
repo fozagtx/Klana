@@ -3,7 +3,7 @@
 import { BookOpen, Newspaper, Search, Send } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
-import { searchEducationalContent } from "@/app/actions/search";
+// API route will be used instead of server action
 import { Results } from "@/components/Results";
 import {
   PromptInput,
@@ -52,6 +52,8 @@ export function SearchPage() {
   >("general");
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchResults, setSearchResults] = useState<any>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Handle search submission
   const handleSearch = async () => {
@@ -59,15 +61,42 @@ export function SearchPage() {
 
     setIsLoading(true);
     setHasSearched(true);
+    setSearchError(null);
+    setSearchResults(null);
 
     try {
-      const formData = new FormData();
-      formData.append("query", query);
-      formData.append("category", selectedCategory);
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          category: selectedCategory,
+        }),
+      });
 
-      await searchEducationalContent(formData);
+      const result = await response.json();
+
+      if (result.success) {
+        setSearchResults({
+          query,
+          category: selectedCategory,
+          status: "complete",
+          totalResults: 0,
+          results: [],
+          suggestions: [],
+          educationalLevel:
+            selectedCategory === "academic" ? "university" : "general",
+          timestamp: new Date().toISOString(),
+          aiResponse: result.aiResponse,
+        });
+      } else {
+        setSearchError(result.error || "Search failed");
+      }
     } catch (error) {
       console.error("Search failed:", error);
+      setSearchError("An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -78,15 +107,42 @@ export function SearchPage() {
     setQuery(quickQuery);
     setIsLoading(true);
     setHasSearched(true);
+    setSearchError(null);
+    setSearchResults(null);
 
     try {
-      const formData = new FormData();
-      formData.append("query", quickQuery);
-      formData.append("category", selectedCategory);
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: quickQuery,
+          category: selectedCategory,
+        }),
+      });
 
-      await searchEducationalContent(formData);
+      const result = await response.json();
+
+      if (result.success) {
+        setSearchResults({
+          query: quickQuery,
+          category: selectedCategory,
+          status: "complete",
+          totalResults: 0,
+          results: [],
+          suggestions: [],
+          educationalLevel:
+            selectedCategory === "academic" ? "university" : "general",
+          timestamp: new Date().toISOString(),
+          aiResponse: result.aiResponse,
+        });
+      } else {
+        setSearchError(result.error || "Search failed");
+      }
     } catch (error) {
       console.error("Search failed:", error);
+      setSearchError("An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -193,7 +249,13 @@ export function SearchPage() {
       {/* Results and Tips Section */}
       <div className="container mx-auto px-6 py-8">
         {/* Search Results */}
-        {hasSearched && <Results />}
+        {hasSearched && (
+          <Results
+            data={searchResults}
+            isLoading={isLoading}
+            error={searchError}
+          />
+        )}
 
         {/* Study Tips */}
         {!hasSearched && (

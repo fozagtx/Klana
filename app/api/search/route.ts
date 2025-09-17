@@ -1,20 +1,20 @@
-"use server";
-
+import { NextRequest, NextResponse } from "next/server";
 import { mastra } from "@/src/mastra";
 
-export async function searchEducationalContent(formData: FormData) {
+export async function POST(request: NextRequest) {
   try {
-    const query = formData.get("query")?.toString();
-    const category = formData.get("category")?.toString() || "general";
+    const body = await request.json();
+    const { query, category = "general" } = body;
 
     if (!query || typeof query !== "string") {
-      throw new Error("Query is required and must be a string");
+      return NextResponse.json(
+        { success: false, error: "Query is required and must be a string" },
+        { status: 400 }
+      );
     }
 
     const agent = mastra.getAgent("learningAgent");
 
-    // Generate response using the agent with proper tool calling
-    // The artifacts are handled by the tool itself via streaming
     const result = await agent.generate(
       [
         {
@@ -32,7 +32,7 @@ export async function searchEducationalContent(formData: FormData) {
       },
     );
 
-    return {
+    return NextResponse.json({
       success: true,
       aiResponse: result.text,
       metadata: {
@@ -40,17 +40,20 @@ export async function searchEducationalContent(formData: FormData) {
         model: "gpt-4o-mini",
         finishReason: result.finishReason,
       },
-    };
+    });
   } catch (error) {
-    console.error("Search action error:", error);
+    console.error("Search API error:", error);
 
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
 
-    return {
-      success: false,
-      error: "Failed to process search request",
-      details: errorMessage,
-    };
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to process search request",
+        details: errorMessage,
+      },
+      { status: 500 }
+    );
   }
 }

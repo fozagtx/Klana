@@ -1,6 +1,5 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { SearchResults } from "../../artifacts/search";
 
 const braveSearchSchema = z.object({
   query: z
@@ -18,59 +17,21 @@ const braveSearchSchema = z.object({
     .describe("Type of search to perform"),
 });
 
-interface BraveSearchResult {
-  title?: string;
-  description?: string;
-  url: string;
-}
-
-interface BraveSearchResponse {
-  web?: {
-    results?: BraveSearchResult[];
-  };
-}
-
 export const braveSearchTool = createTool({
   id: "brave_search",
   description:
-    "Search the web using Brave Search API for educational content and learning resources. Streams real-time results with progress updates.",
+    "Search the web using Brave Search API for educational content and learning resources.",
   inputSchema: braveSearchSchema,
-  execute: async ({ query, count = 10, category = "general" }) => {
-    // Initialize streaming search results artifact
-    const searchArtifact = SearchResults.stream({
-      query,
-      category,
-      status: "loading",
-      progress: 0,
-      totalResults: 0,
-      results: [],
-      suggestions: [],
-      educationalLevel: category === "academic" ? "university" : "general",
-      timestamp: new Date().toISOString(),
-    });
-
+  execute: async ({ context: { query, count = 10, category = "general" } }) => {
     const braveApiKey = process.env.BRAVE_API_KEY;
 
     if (!braveApiKey) {
-      await searchArtifact.error({
-        ...searchArtifact.data,
-        status: "error",
-        error:
-          "BRAVE_API_KEY environment variable is not set. Please add your Brave Search API key to your .env file.",
-      });
       throw new Error(
         "BRAVE_API_KEY environment variable is not set. Please add your Brave Search API key to your .env file.",
       );
     }
 
     try {
-      // Update status to streaming
-      await searchArtifact.update({
-        ...searchArtifact.data,
-        status: "streaming",
-        progress: 0.2,
-      });
-
       // Build search query with educational focus
       let searchQuery = query;
       if (category === "academic") {
@@ -93,30 +54,18 @@ export const braveSearchTool = createTool({
         },
       );
 
-      // Update progress
-      await searchArtifact.update({
-        ...searchArtifact.data,
-        progress: 0.5,
-      });
-
       if (!response.ok) {
         throw new Error(
           `Brave Search API error: ${response.status} ${response.statusText}`,
         );
       }
 
-      const data = (await response.json()) as BraveSearchResponse;
-
-      // Update progress after API response
-      await searchArtifact.update({
-        ...searchArtifact.data,
-        progress: 0.8,
-      });
+      const data = await response.json();
 
       // Transform Brave Search results to our format
       const results = (data.web?.results || [])
         .slice(0, count)
-        .map((result: BraveSearchResult, index: number) => {
+        .map((result: any, index: number) => {
           // Determine content type based on URL and title
           let type: "educational" | "tutorial" | "reference" | "news" =
             "educational";
@@ -177,22 +126,10 @@ export const braveSearchTool = createTool({
         `${query} best practices`,
       ];
 
-      // Complete the artifact with final results
-      await searchArtifact.complete({
-        query,
-        category,
-        status: "complete",
-        progress: 1.0,
-        totalResults: results.length,
-        results,
-        suggestions,
-        educationalLevel: category === "academic" ? "university" : "general",
-        timestamp: new Date().toISOString(),
-      });
-
       return {
         query,
         category,
+        status: "complete",
         totalResults: results.length,
         results,
         suggestions,
@@ -200,19 +137,12 @@ export const braveSearchTool = createTool({
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      // Update artifact with error state
       const errorMessage =
         error instanceof Error
           ? error.message.includes("fetch")
             ? "Failed to connect to Brave Search API. Please check your internet connection."
             : `Brave search failed: ${error.message}`
           : "Brave search failed: Unknown error";
-
-      await searchArtifact.error({
-        ...searchArtifact.data,
-        status: "error",
-        error: errorMessage,
-      });
 
       throw new Error(errorMessage);
     }
